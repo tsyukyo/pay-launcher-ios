@@ -1,5 +1,5 @@
 // オフラインでも起動画面を開けるよう、アプリ本体をキャッシュする
-const CACHE = "payment-launcher-v2";
+const CACHE = "payment-launcher-v3";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
