@@ -61,7 +61,7 @@ input[type=text],select{width:100%;padding:10px;border:1px solid var(--line);bor
 .empty{color:var(--sub);text-align:center;padding:24px 8px}
 /* 起動画面：開いた瞬間に押せるよう、大きなボタンだけを置く */
 body.launching{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
-body.launching .tabs{display:none}
+body.launching .tabs,body.setting-up .tabs{display:none}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 0 4px}
 .topbar .brand{font-size:15px;font-weight:600;color:var(--sub)}
 .icon-btn{background:transparent;min-width:44px;min-height:44px;padding:8px;color:var(--sub);display:flex;align-items:center;justify-content:center}
@@ -81,6 +81,17 @@ body.launching .tabs{display:none}
 #pick-app[hidden],#pick-group[hidden]{display:none}
 #pick-app .back{order:2;align-self:stretch;margin-top:12px;background:var(--accent-weak);border-radius:14px}
 .back{background:transparent;color:var(--accent);padding:10px 4px;min-height:44px;font-size:17px}
+.pick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pick{min-height:52px;border-radius:14px;background:var(--card);border:1px solid var(--line);
+  display:flex;align-items:center;gap:8px;text-align:left;padding:8px 12px;font-weight:600}
+.pick .mark{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:13px;color:transparent}
+.pick[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-weak)}
+.pick[aria-pressed="true"] .mark{background:var(--accent);border-color:var(--accent);color:#fff}
+.setup-bar{position:sticky;bottom:0;padding:12px 0 calc(12px + env(safe-area-inset-bottom));background:var(--bg)}
+.setup-bar button{width:100%;min-height:52px;font-size:17px}
+.toast{position:fixed;left:16px;right:16px;top:calc(12px + env(safe-area-inset-top));z-index:20;
+  background:#1c1917;color:#fff;border-radius:12px;padding:12px 16px;text-align:center;font-size:15px}
 .app .fav{background:transparent;font-size:20px;min-width:40px;min-height:40px;padding:0;color:var(--sub)}
 .app .fav.on{color:#d97706}
 dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);width:min(92vw,420px);padding:16px}
@@ -113,6 +124,14 @@ textarea{width:100%;min-height:120px;font:16px/1.4 ui-monospace,monospace;border
   </div>
 </section>
 
+<section id="v-setup" class="view">
+  <h1>かんたん登録</h1>
+  <p class="note">iPhoneに入っているアプリを押して選ぶだけです。グループ分けは自動で行います。</p>
+  <div id="setup-list"></div>
+  <p class="note">一覧にないアプリは、あとで「編集」の「手動で追加」から入れられます。</p>
+  <div class="setup-bar"><button class="primary" id="btn-setup-done">登録する</button></div>
+</section>
+
 <section id="v-edit" class="view">
   <h1>グループ編集</h1>
   <p class="note">グループを選んで、アプリの追加・並べ替え・削除をします。</p>
@@ -126,7 +145,8 @@ textarea{width:100%;min-height:120px;font:16px/1.4 ui-monospace,monospace;border
   </div>
   <div class="card" id="edit-apps"></div>
   <div class="row">
-    <button class="primary grow" id="btn-add-from-catalog">カタログから追加</button>
+    <button class="primary grow" id="btn-open-setup">かんたん登録</button>
+    <button class="grow" id="btn-add-from-catalog">カタログから追加</button>
     <button class="grow" id="btn-add-custom">手動で追加</button>
   </div>
 </section>
@@ -207,8 +227,10 @@ const CATALOG = [
   {cat:"決済", name:"メルペイ（メルカリ）", url:"mercari://"},
   {cat:"決済", name:"ファミペイ", url:""},
   {cat:"決済", name:"ゆうちょPay", url:""},
-  {cat:"決済", name:"LINE Pay", url:"line://pay/generateQR"},
   {cat:"決済", name:"Apple Wallet", url:"shoebox://"},
+  {cat:"決済", name:"楽天Edy", url:""},
+  {cat:"決済", name:"nanaco", url:""},
+  {cat:"決済", name:"WAON", url:""},
   {cat:"ポイント", name:"楽天ポイントクラブ", url:""},
   {cat:"ポイント", name:"Vポイント", url:""},
   {cat:"ポイント", name:"Ponta", url:""},
@@ -226,6 +248,13 @@ const CATALOG = [
   {cat:"店舗", name:"ユニクロ", url:""},
   {cat:"店舗", name:"無印良品", url:""},
   {cat:"店舗", name:"iAEON", url:""},
+  {cat:"店舗", name:"ファミリーマート", url:""},
+  {cat:"店舗", name:"ケーズデンキ", url:""},
+  {cat:"店舗", name:"エディオン", url:""},
+  {cat:"店舗", name:"ツルハドラッグ", url:""},
+  {cat:"店舗", name:"サンドラッグ", url:""},
+  {cat:"店舗", name:"ニトリ", url:""},
+  {cat:"店舗", name:"GU", url:""},
 ];
 const STORE_KEY = "payment-launcher:v1";
 const DEFAULT_STATE = {
@@ -315,7 +344,9 @@ function render(){
       el("div",{},a.name," ",badge),
       el("div",{className:"meta",textContent:url||"タップして起動方法を設定"}));
     info.onclick = ()=>openAppDialog(a);
-    const test = el("button",{className:"small",textContent:"試す",disabled:!url,onclick:()=>tryLaunch(a,url)});
+    const test = a.method==="shortcut"
+      ? el("button",{className:"small",textContent:"作る",onclick:()=>makeAppShortcut(a)})
+      : el("button",{className:"small",textContent:"試す",disabled:!url,onclick:()=>tryLaunch(a,url)});
     const up = el("button",{className:"small",textContent:"↑",disabled:i===0,onclick:()=>{move(eg.apps,i,-1);save();}});
     const down = el("button",{className:"small",textContent:"↓",disabled:i===eg.apps.length-1,onclick:()=>{move(eg.apps,i,1);save();}});
     const fav = el("button",{className:"fav"+(a.fav?" on":""),textContent:a.fav?"★":"☆",
@@ -363,8 +394,9 @@ function renderLaunch(){
     gg.append(el("button",{className:"group-tile",onclick:()=>{launchGroup=x.i;renderLaunch();}},
       x.g.name, el("small",{textContent:`${x.apps.length}個のアプリ`})));
   }
-  if(!groups.length) gg.append(el("div",{className:"empty",style:"grid-column:1/-1",
-    textContent:"右上の編集ボタンからアプリを追加してください"}));
+  if(!groups.length) gg.append(el("div",{className:"empty",style:"grid-column:1/-1"},
+    el("p",{textContent:"まだアプリが登録されていません"}),
+    el("button",{className:"primary",textContent:"かんたん登録をはじめる",onclick:openSetup})));
 
   if(current!==null){
     const x = groups.find(y=>y.i===current);
@@ -376,7 +408,64 @@ function showView(id){
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x.dataset.view===id));
   document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on",v.id===id));
   document.body.classList.toggle("launching", id==="v-launch");
+  document.body.classList.toggle("setting-up", id==="v-setup");
 }
+function toast(text){
+  const t = el("div",{className:"toast",textContent:text});
+  document.body.append(t);
+  setTimeout(()=>t.remove(), 2200);
+}
+
+// かんたん登録：カタログをカテゴリごとに並べ、押した（持っている）アプリだけを同名グループへ自動で振り分ける
+let setupPicked = new Set();
+function openSetup(){
+  setupPicked = new Set(state.groups.flatMap(g=>g.apps.map(a=>a.name)).filter(n=>CATALOG.some(c=>c.name===n)));
+  renderSetup();
+  showView("v-setup");
+  window.scrollTo(0,0);
+}
+function renderSetup(){
+  const list = $("setup-list"); list.replaceChildren();
+  for(const cat of [...new Set(CATALOG.map(c=>c.cat))]){
+    list.append(el("h2",{textContent:cat}));
+    const grid = el("div",{className:"pick-grid"});
+    for(const c of CATALOG.filter(x=>x.cat===cat)){
+      const on = setupPicked.has(c.name);
+      grid.append(el("button",{className:"pick",ariaPressed:String(on),onclick:()=>{
+        on ? setupPicked.delete(c.name) : setupPicked.add(c.name); renderSetup();
+      }}, el("span",{className:"mark",textContent:"✓"}), c.name));
+    }
+    list.append(grid);
+  }
+  $("btn-setup-done").textContent = setupPicked.size ? `${setupPicked.size}個を登録する` : "登録する";
+}
+$("btn-setup-done").onclick = ()=>{
+  const catalogNames = new Set(CATALOG.map(c=>c.name));
+  // 選ばなかったカタログのアプリは外す（手動で追加したアプリはそのまま）
+  for(const g of state.groups) g.apps = g.apps.filter(a=>!catalogNames.has(a.name) || setupPicked.has(a.name));
+  const have = new Set(state.groups.flatMap(g=>g.apps.map(a=>a.name)));
+  for(const c of CATALOG){
+    if(!setupPicked.has(c.name) || have.has(c.name)) continue;
+    let g = state.groups.find(x=>x.name===c.cat);
+    if(!g){ g = {name:c.cat, apps:[]}; state.groups.push(g); }
+    g.apps.push({name:c.name, method:c.url?"scheme":"shortcut", url:c.url, shortcut:"開く_"+c.name, verified:false});
+  }
+  save();
+  launchGroup = null;
+  showView("v-launch"); renderLaunch();
+  toast("登録しました。「連携」からショートカットに送ると、ショートカットにも反映されます");
+};
+
+// 個別ショートカット作り：名前をコピーしてから、ショートカットAppの新規作成画面を開く
+function makeAppShortcut(app){
+  const name = app.shortcut || "開く_"+app.name;
+  // 押した直後に書き込まないとコピーが許可されないので、完了は待たない
+  try{ navigator.clipboard.writeText(name).catch(()=>{}); }catch(e){}
+  alert(`ショートカットAppの新規作成画面を開きます。\n\n1. 「Appを開く」を追加して「${app.name}」を選ぶ\n2. 名前を「${name}」にする（コピー済みなので貼り付けるだけ）\n3. 完了を押す`);
+  location.href = "shortcuts://create-shortcut";
+}
+$("btn-open-setup").onclick = openSetup;
+
 function move(arr,i,d){ const j=i+d; if(j<0||j>=arr.length) return; [arr[i],arr[j]]=[arr[j],arr[i]]; }
 
 // タブ
@@ -528,6 +617,8 @@ $("btn-reset").onclick = ()=>{
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
 render();
 resetLaunch();
+// 初めて開いたとき（アプリが1つもないとき）は、かんたん登録から始める
+if(!state.groups.some(g=>g.apps.length)) openSetup();
 </script>
 </body>
 </html>
